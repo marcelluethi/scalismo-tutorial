@@ -9,6 +9,16 @@ In the following, we assume that you successfully [setup](https://github.com/uni
 In case you started your own sbt project from scratch (and did not start from the [tutorial project](https://github.com/unibas-gravis/scalismo-tutorial)), 
 please download and extract the example data [here](http://shapemodelling.cs.unibas.ch/data/face-data.zip).
 
+## Imports
+
+There are some basic imports, which we will need in most scalismo applications. 
+The other packagges will be imported directly when needed. 
+
+```scala mdoc
+import scalismo.common._
+import scalismo.geometry._
+import breeze.linalg.DenseVector
+```
 
 
 ## Initializing the system
@@ -20,36 +30,33 @@ value with a (seeded) random source. The latter is especially useful when reprod
 such as when you are debugging your program.  
 
 The following code shows how Scalismo can be initialized: 
-```tut:silent
+```scala mdoc
+
 scalismo.initialize()
 import scalismo.utils.Random.implicits._ // this uses the default random source 
 //implicit val rng = Random(seed = 1024L) // used to provide a seeded source of randomness     
 ```
 
-To get it out of the way, we will import the classes that we need throughout this introductory example. The other inputs will 
-be made when needed.
-```tut:silent
-import scalismo.common._
-import scalismo.geometry._
-import scalismo.mesh.TriangleMesh
-import breeze.linalg.DenseVector
-```
 
 ## Loading and visualizing a mesh
 
 We start by loading and visualizing the reference mesh, which we will later use as the
-domain for our Gaussian Process model. To load and visualize the mesh, we need a few
-more imports:
+domain for our Gaussian Process model. Visualizing is done using ```scalismo-ui```:
+```scala mdoc
+import scalismo.ui.api._
+```
 
-```tut:silent
+We also need the following imports
+
+```scala mdoc
 import java.io.File
-import scalismo.io.MeshIO 
-import scalismo.ui.api.ScalismoUI
+import scalismo.io.MeshIO
+import scalismo.mesh.TriangleMesh 
 import java.awt.Color
 ```
 
 First we load a mesh from a file. 
-```tut:silent
+```scala mdoc
 val referenceMesh = MeshIO.readMesh(new File("datasets/quickstart/facemesh.stl")).get
 ```
 The get function at the end of the line is there because readMesh could fail.
@@ -59,32 +66,37 @@ not of big importance. In more serious software project, proper error handling s
 
 Scalismo was designed to make it simple to visualize objects. Visualization is provided by
 ```ScalismoUI```. To start ScalismoUI, we write
-```tut:silent
+```scala mdoc
 val ui = ScalismoUI()
 ```
+
 We also create a group in the ui. A group groups together different views of the same object.
-```tut:silent
+```scala mdoc
 val modelGroup = ui.createGroup("model")
 ```
-
+ 
 To visualize the mesh that we just loaded we call
-```tut:silent
+```scala mdoc
 val refMeshView = ui.show(modelGroup, referenceMesh, "referenceMesh")
 ```
+
 This adds the surface mesh to the created group "modelGroup" under the name "referenceMesh" and visualizes
 the mesh. Every call to show return a "view" object, which lets us control the visualization
 properties of the object. This object allows us, for example to change its color
-```tut:silent
+```scala mdoc
 refMeshView.color = Color.RED
 ```
+
 or its opacity
-```tut:silent
+
+```scala mdoc
 refMeshView.opacity = 0.5
 ```
+
 *You can also change the visualization properties of this object by selecting the object in the scene tree of the gui. To remove or make an object invisible, right click on an object in the scene tree.*
 
 To remove the mesh again from the scene we call
-```tut:silent
+```scala mdoc
 refMeshView.remove
 ```
 
@@ -94,7 +106,7 @@ Now we are ready to build a Gaussian Process model.
 We create a new Gaussian process that models 3D vector fields. 
 Let's start, however, with the necessary imports
 
-```tut:silent
+```scala mdoc
 import scalismo.kernels._
 import scalismo.statisticalmodel._
 import scalismo.numerics._
@@ -103,7 +115,7 @@ We define the mean of the Gaussian process to be the zero vector field in 3D.
 As a covariance function we use a Gaussian kernel and choose to treat the x,y,z component
 of the vector field to be uncorrelated. This last property is achieved by using a ```DiagonalKernel```.
 
-```tut:silent
+```scala mdoc
 val mean = VectorField(RealSpace[_3D], (_ : Point[_3D]) => Vector.zeros[_3D])
 val kernel = DiagonalKernel[_3D](GaussianKernel(sigma = 40) * 50.0, outputDim = 3)
 val gp = GaussianProcess(mean, kernel)
@@ -111,45 +123,45 @@ val gp = GaussianProcess(mean, kernel)
 
 Before we can use the Gaussian process for modelling shapes, we need to perform a low-rank
 approximation to obtain a parametric, tractable definition. Here, we approximate
-the first 200 dimensions (basis function). The approximation uses a finite sample of
+the first 50 basis functions. The approximation uses a finite sample of
 points on the mesh to approximate the basis function. Which points are used is determined
 by the sampler we provide. Here we choose to sample arbitrary points of the mesh.
 
-```tut:silent
-val sampler = UniformMeshSampler3D(
+```scala mdoc
+val meshSampler = UniformMeshSampler3D(
     referenceMesh, 
-    numberOfPoints = 30)
+    numberOfPoints = 300)
 
 val lowRankGP = LowRankGaussianProcess.approximateGP(
     gp, 
-    sampler, 
-    numBasisFunctions = 10)
+    meshSampler, 
+    numBasisFunctions = 50)
 ```
 
 We can sample random function (i.e. vector fields) from the resulting
 randomFun by calling
 
-```tut:silent
+```scala mdoc
 val randomFun = lowRankGP.sample
 ```
 
 randomFun is a proper function, which we can evaluate on any point in 3D.
 For example, we can call
 
-```tut:silent
+```scala mdoc
 val aRandomValue = randomFun(Point(7.0, 15.0, 1.0))
 ```
 
 to evaluate it at the point (7, 15, 1). The resulting Gaussian process can now be used to define a shape model. This is 
  achieved by applying it to all the points of the reference mesh as follows:
  
-```tut:silent
+```scala mdoc
 val shapeModel = StatisticalMeshModel(referenceMesh, lowRankGP)
 ```
 As we see here, a shape model is simply the combination of a referenceMesh with a Gaussian proces.
 This is also used in ScalismoUi to visualize Gaussian process models. This view is also reflected
 in the ui. When we show a model using
-```tut:silent
+```scala mdoc
 val ssmView = ui.show(modelGroup, shapeModel, "SSM")
 ```
 we see that in the scene tree the reference mesh and a GP object are added.
@@ -164,11 +176,11 @@ or explore the shape space more efficiently by changing the sliders.
 We can now use this model to perform a registration of a target mesh. We start by importing the necessary classes and 
 by loading the target mesh and display it.
 
-```tut:silent
+```scala mdoc
 import scalismo.registration._
 ```
 
-```tut:silent
+```scala mdoc
 val targetGroup = ui.createGroup("target")
 val targetMesh = MeshIO.readMesh(new File("datasets/quickstart/face-2.stl")).get
 val targetMeshView = ui.show(targetGroup, targetMesh, "targetMesh")
@@ -184,7 +196,7 @@ To define a registration, we need to define four things:
 
 For non-rigid registration we usually model the possible transformations using a Gaussian process. We use the Gaussian process that
 we have defined above to define the trasnformation space.  
-```tut:silent
+```scala mdoc
  val transformationSpace = GaussianProcessTransformationSpace(lowRankGP)
 ```
 
@@ -193,7 +205,7 @@ image to image metrics. These can, however, easily be used for surface registrat
 In addition to the images, the metric also needs to know the possible transformations (as modelled by the transformation space) and 
 a sampler. The sampler determines the points where the metric is evaluated. In our case we choose uniformely sampled points on the
 reference mesh. 
-```tut:silent
+```scala mdoc
     val fixedImage = referenceMesh.operations.toDistanceImage
     val movingImage = targetMesh.operations.toDistanceImage
     val sampler = UniformMeshSampler3D(referenceMesh, numberOfPoints = 1000)
@@ -201,23 +213,23 @@ reference mesh.
 ```
 
 As an optimizer, we choose an LBFGS Optimizer
-```tut:silent
+```scala mdoc
 val optimizer = LBFGSOptimizer(maxNumberOfIterations = 100)
 ```
 and for regularization we choose to penalize the L2 norm using the `L2Regularizer`:
-```tut:silent
+```scala mdoc
 val regularizer = L2Regularizer(transformationSpace)
 ``` 
 
 We are now ready to define Scalismo's registration object.
-```tut:silent
+```scala mdoc
  val registration = Registration(metric, regularizer, regularizationWeight = 0.1, optimizer)
  
 ```
 
 Registration is an iterative process. Consequently, we work with the registration using an iterator. We obtain an iterator by 
 calling the `iterator` method, where we also provide a starting position for the iteration (which is in this case the zero vector):
-```tut:silent
+```scala mdoc
  val initialCoefficients = DenseVector.zeros[Double](lowRankGP.rank)
  val registrationIterator = registration.iterator(initialCoefficients)
 ```
@@ -225,7 +237,7 @@ calling the `iterator` method, where we also provide a starting position for the
 Before running the registration, we change the iterator such that it prints in each iteration to current objective value, 
 and updates the visualization. This lets us visually inspect the progress of the registration procedure.
 
-```tut:silent
+```scala mdoc
 val visualizingRegistrationIterator = for ((it, itnum) <- registrationIterator.zipWithIndex) yield {
   println(s"object value in iteration $itnum is ${it.value}")
   ssmView.shapeModelTransformationView.shapeTransformationView.coefficients = it.parameters
@@ -238,17 +250,17 @@ the original iteration with visualization. The actual registration is executed o
 This can, for example be achieved by converting it to a sequence. The resulting sequence holds all the intermediate 
 states of the registration. We are usually only interested in the last one:
 
-```tut:silent
-//val registrationResult = visualizingRegistrationIterator.toSeq.last
+```scala mdoc
+val registrationResult = visualizingRegistrationIterator.toSeq.last
 ```
 
 You should see in the graphical user interface, how the face mesh slowly adapts to the shape of the target mesh.
 
 The final mesh representation can be obtained by obtaining the transform corresponding to the parameters and to 
 warp the reference mesh with this tranform:
-```tut:silent
-//    val registrationTransformation = transformationSpace.transformForParameters(registrationResult.parameters)
-//    val fittedMesh = referenceMesh.transform(registrationTransformation)
+```scala mdoc
+    val registrationTransformation = transformationSpace.transformForParameters(registrationResult.parameters)
+    val fittedMesh = referenceMesh.transform(registrationTransformation)
 ```
 
 ### Working with the registration result
@@ -256,7 +268,7 @@ warp the reference mesh with this tranform:
 The fittedMesh that we obtained above is a surface that approximates the target surface.  It corresponds to the best representation of the target in the model. For most tasks, this approximation is sufficient.
 However, sometimes, we need an exact representation of the target mesh. This can be achieved by defining a projection function, which projects each point onto its closest point on the target.
 
-```tut:silent
+```scala mdoc
 val targetMeshOperations = targetMesh.operations
 val projection = (pt : Point[_3D]) => {
   targetMeshOperations.closestPointOnSurface(pt).point
@@ -264,18 +276,17 @@ val projection = (pt : Point[_3D]) => {
 ```
 Composing the result of the registration with this projection, will give us a mapping that identifies for each point of the reference mesh the corresponding point of the target mesh.
 
-```tut:silent
-//val finalTransformation = registrationTransformation.andThen(projection)
+```scala mdoc
+val finalTransformation = registrationTransformation.andThen(projection)
 ```
 
 To check this last point, we warp the reference mesh with the finalTransform and visualize it. Note that the projected target now coincides with the target mesh..
 
-```tut:silent
-//val projectedMesh = referenceMesh.transform(finalTransformation)
-//val resultGroup = ui.createGroup("result")
-//val projectionView = ui.show(resultGroup, projectedMesh, "projection")
+```scala mdoc
+val projectedMesh = referenceMesh.transform(finalTransformation)
+val resultGroup = ui.createGroup("result")
+val projectionView = ui.show(resultGroup, projectedMesh, "projection")
 ```
-
 
 ### Improving registrations for more complex shapes.
 
@@ -285,11 +296,11 @@ large, the procedure will result in a nice and smooth mesh, but fails to closely
 result in folds and bad correspondences. In such cases it has proven extremely useful to simply iterate the registration procedure,
 with decreasing regularization weights. In the following we illustrate this procedure. We start by defining a case class, which
 collects all relevant parameters:
-```tut:silent
+```scala mdoc
  case class RegistrationParameters(regularizationWeight : Double, numberOfIterations : Int, numberOfSampledPoints : Int)
 ```
 We put all the registration code into a function, which takes (among others) the registration parameters as an argument.
-```tut:silent
+```scala mdoc
 
     def doRegistration(
             lowRankGP : LowRankGaussianProcess[_3D, Vector[_3D]],
@@ -333,7 +344,7 @@ We put all the registration code into a function, which takes (among others) the
 Finally, we define the parameters and run the registration. Note that when we decrease the
 regularization weight, we typically need to sample less points from the surface.
 
-```tut:silent
+```scala mdoc
     val registrationParameters = Seq(
         RegistrationParameters(regularizationWeight = 1e-1, numberOfIterations = 20, numberOfSampledPoints = 1000),
         RegistrationParameters(regularizationWeight = 1e-2, numberOfIterations = 50, numberOfSampledPoints = 1000),
@@ -346,6 +357,6 @@ regularization weight, we typically need to sample less points from the surface.
 ```
 From this point we use the procedure described above to work with the registration result.
 
-```tut:invisible
+```scala mdoc
   ui.close()
 ```
